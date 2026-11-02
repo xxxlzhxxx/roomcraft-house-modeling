@@ -1,0 +1,15 @@
+# Local credentials and private assets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+inputs/
+runs/
+web/cases/
+web/walk/reference-navigation.json
+node_modules/
+web/vendor/
+__pycache__/
+*.py[cod]
+.DS_Store

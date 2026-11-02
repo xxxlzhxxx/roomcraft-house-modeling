@@ -1,0 +1,6 @@
+{
+  "name": "roomcraft-workflow-viewer",
+  "private": true,
+  "type": "module",
+  "dependencies": {"three": "0.182.0"}
+}

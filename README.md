@@ -1,0 +1,84 @@
+# RoomCraft：住宅三维制作工作流
+
+将户型、空间约束和家具参考转换为可编辑三维场景，输出原生效果图、AI 增强图、全景和本地 3D 漫游。目录包含原项目的调度器、模型调用脚本、Kimi 编写的历史场景工作流和实时漫游网页代码。
+
+**项目约束：所有 Blender 操作和 Blender 脚本编写、修改、验证均须通过 Codex CLI + Kimi K3.1 执行。** 不要直接运行 Blender 脚本；先确认私有配置确实指向所需模型。任务记录中的模型名称只是标签，不是独立的模型身份验证。
+
+## 目录
+
+- `scripts/spatial/`：Codex CLI 调度、Seed3D 家具和 Seedream 参考图增强入口。
+- `templates/standard/workflow.py`：历史案例中由 Kimi 编写的 Blender 工作流，支持检查、准备、照明预览、渲染、导出和验证。
+- `prepare.py`：从本地私有案例包建立新的运行目录，不调用模型或 Blender。
+- `web/`：Three.js 自由漫游页面和交互代码；需自行提供私有模型、导航与灯光文件。
+- `task-example.txt`：为新场景准备 Kimi 任务的通用模板。
+
+该历史 Blender 脚本依赖特定场景中的对象名、14 组家具、两组门、2.75 米净高及 9 个全景点位，不是任意户型的一键转换器；其他户型需要通过 Kimi + Blender 改写并人工验收。历史标准场景与后续两卫修正是不同版本，不要混用。
+
+## 开始前准备
+
+需要 Python 3.11+、Node.js、Codex CLI、Blender 以及各模型的可用权限。历史渲染记录的 Blender 版本为 5.2.0 LTS；当前目录的跨机器完整重跑尚未验证。模型调用使用 Ark OpenAI 兼容地址 `https://ark.cn-beijing.volces.com/api/v3`，在本机私有环境配置模型和账号，示例变量见 `.env.example`。不要把实际值写进仓库。
+
+将授权使用的户型图、标注尺寸、净高、风格与家具参考、可编辑场景和材质放在本地。已有私有复现包需解压后提供给 `--bundle`，应包含：
+
+```text
+inputs/base-scene.blend
+templates/standard/config.json
+templates/standard/material-sources/  # 配置中引用的图像
+```
+
+这些包含实际案例信息的文件、生成物、日志、密钥和端点不会随仓库发布。`.gitignore` 排除了 `inputs/`、`runs/`、`web/cases/` 和相关凭据。不要强行添加这些目录。使用前确认每份资料的共享权限。
+
+## 标准化流程
+
+从本目录执行；把路径换成自己的解压目录：
+
+```bash
+python3 prepare.py --bundle /path/to/private-bundle --name demo01
+python3 scripts/spatial/run_roomcraft_workflow.py --run-dir runs/demo01 --stage inspect --dry-run
+```
+
+以上只准备文件和任务。dry-run 不验证模型权限、不启动 Blender，也不证明完整工作流可运行。确认模型和私有环境后，按 `inspect`、`prepare`、`lighting-previews`、`render`、`export`、`verify` 依次运行同一调度命令，去掉 `--dry-run`，并将 `--stage` 替换成当前阶段。每步检查实际结果后再运行下一步。
+
+```bash
+source "${CODEX_LLM_ENV_FILE:-$HOME/.codex/llm/ark.env}"
+python3 scripts/spatial/run_roomcraft_workflow.py --run-dir runs/demo01 --stage inspect
+```
+
+如使用其他私有环境文件，通过 `CODEX_LLM_ENV_FILE` 指定。Kimi 调度器支持 `ARK_KIMI_MODEL` 和 `ARK_KIMI_API_KEY`，缺失时读取 `LLM_INVENTORY_FILE` 指向的私有清单。Seed3D 既支持变量别名也会读取私有清单；Seedream 脚本根据清单中 **Seedream 5.0 Pro** 条目选择模型，不能只设置通用默认图像模型。新环境需自行确认清单格式和模型权限。不能将密钥、私有端点、个人路径或原始场景写入任务日志、文档与代码。
+
+执行证据写入 `runs/demo01/jobs/`，场景输入、配置和输出有摘要记录。原工作流使用摘要检查复用缓存；自动检查通过后仍需人工检查布局、机位、材质和可通行性。请勿拿历史检查结果冒充本轮结果。
+
+## AI 家具和二维图片增强
+
+以下从本目录运行，并事先加载自己的私有环境：
+
+```bash
+python3 scripts/spatial/seed3d_furniture.py --image /path/to/reference.png --output runs/sofa --wait 0
+python3 scripts/spatial/seedream_room_enhance.py --input /path/to/render.png --prompt /path/to/prompt.txt --output runs/master-v1.png --check-config
+```
+
+Seed3D 的同一输出目录用于查询已有任务，成功后得到 `asset.glb`；重新生成使用新目录。Seedream 去掉 `--check-config` 才会实际调用模型，并要求新输出名。参考图和提示词、模型标签、输入输出摘要应一起留存。生成可能收费；模型服务、版本和生成结果可能发生变化。
+
+Seed3D 输出需检查尺度、朝向、背面及落地，不能认定为品牌原厂模型。Seedream 图片是二维增强，不会自动更新三维几何、全景、灯光或碰撞；本案例保存的深度/法线/蒙版没有用于本次增强的硬性几何控制。
+
+## 本地 3D 网页
+
+安装前端依赖并从本目录创建本地静态资源链接：
+
+```bash
+npm install
+mkdir -p web/vendor
+ln -s ../../node_modules/three web/vendor/three
+```
+
+从私有案例包的 `web/` 中复制最新场景的 `model.glb`、`lighting.json`、`navigation.json` 到 `web/cases/roomcraft-realtime/`；复制历史场景的 `model.glb`、`lighting.json` 到 `web/cases/roomcraft-baseline/`，并复制 `walk/reference-navigation.json` 到 `web/walk/`。两个版本用于网页内的对照切换，目录已被 Git 忽略。
+
+```bash
+python3 -m http.server 53200 --bind 127.0.0.1 --directory web
+```
+
+打开 http://127.0.0.1:53200/walk.html。页面需要支持 WebGL2；`127.0.0.1` 只能从运行服务的电脑访问。网页是实时近似渲染，与 Cycles 的光线和 AI 静帧不同。旧全景及旧增强图不会随模型自动更新。
+
+## 分享与安全
+
+提交前只检查并暂存要分享的文件。不要提交户型图、品牌照片、个人住址、未经许可的模型、私有案例配置、API 密钥、访问令牌、模型私有端点、日志、浏览器档案或包含这些信息的 Git 历史。用户自备私有素材时也应检查 `.blend` 内嵌数据及生成文件。流程适合方案交流，不替代量房、结构审核或施工图。
