@@ -28,3 +28,14 @@ def redact(text, config):
         text = text.replace(config[name], "[PRIVATE]")
     text = re.sub(r"ep-[\w-]+", "[PRIVATE_ENDPOINT]", text)
     return text
+
+
+def verify_kimi_mapping(config):
+    """Check the configured endpoint against the operator's private K3.1 entry."""
+    inventory=Path(os.environ.get("LLM_INVENTORY_FILE",str(Path.home()/"WorkSpace/LLM_env.md")))
+    lines=inventory.read_text().splitlines()
+    index=next((i for i,line in enumerate(lines) if line.strip().lower().strip("`# ") in {"k3.1","kimi k3.1","kimi-k3.1-pro"}),None)
+    expected=re.search(r"ep-[\w-]+","\n".join(lines[index+1:index+5])) if index is not None else None
+    if not expected or config["model"]!=expected.group(0):
+        raise RuntimeError("Configured model does not match the required Kimi K3.1 private inventory entry")
+    return True
